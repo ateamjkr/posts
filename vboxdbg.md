@@ -86,7 +86,7 @@ sa          <range> <pattern>              Search memory for an ascii string.
 ```
 
 To search for `root:$1$` the command `sa 0 "root:$1$"` is used. This is the output I got:
-![Searching Memory](/ateamjkr/posts/blob/master/img/vboxdbg-002.png)
+![Searching Memory](https://github.com/ateamjkr/posts/blob/master/img/vboxdbg-001.png)
 
 We can see that the root hash from `/etc/passwd` is found. No idea why we see it multiple times I just focussed on the first address and used one of the memory display commands to check what we have at the address:
 
@@ -98,7 +98,7 @@ db          [addr]                         Dump memory in bytes.
 ```
 
 Using the VBoxDbg command `db 00008800d8cd3000` I could easily verify that I found the beginning of `/etc/shadow`:
-![Displaying Memory](/ateamjkr/posts/blob/master/img/vboxdbg-002.png)
+![Displaying Memory](https://github.com/ateamjkr/posts/blob/master/img/vboxdbg-002.png)
 
 ##### Step 2 - Modify memory
 I had the correct address of the cached file in memory so I was ready to replace the contents with some data that suited me better - the hash of the password `root`. To make replacement easier I also used a 7 character salt like I found on the VM so that the length of my password hash and the one configured matched.
@@ -168,12 +168,12 @@ db 00008800d8cd3000
 ```
 
 This is what I got:
-![Modifying Memory](/ateamjkr/posts/blob/master/img/vboxdbg-003.png)
+![Modifying Memory](https://github.com/ateamjkr/posts/blob/master/img/vboxdbg-003.png)
 
 ##### Step 3 - Getting the root flag ;)
 The final step was to verify the patching was correct. I could log in with `root`/`root` and ran `id` and got my favorite output for this command: `uid=0(root)`. 
 
-![Get root flag](/ateamjkr/posts/blob/master/img/vboxdbg-004.png)
+![Get root flag](https://github.com/ateamjkr/posts/blob/master/img/vboxdbg-004.png)
 
 #### The end
 Once on the box I quickly discovered a hand full of vulnerabilites that from then on helped me to get root without touching VBoxDbg at all.
