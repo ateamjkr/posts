@@ -3,7 +3,7 @@
 #### Preface
 I am really curious about how Linux (and BSD) based appliances are built and what protection mechansism are in place to keep the appliances' administrative users from getting root permission. 
 
-Normally, when I have VM based appliances it is quite easy to get access to the OS. Booting into single user mode and adding a secondary root user usually does the trick. Sometimes the disks are LUKS encrypted with the keyfiles or a password that can be read from initrd of initramfs archive. Once the disks are properly decrypted and mounted I can add a secondary root account like before.
+Normally, when I have VM based appliances it is quite easy to get access to the OS. Booting into single user mode and adding a secondary root user usually does the trick. Sometimes the disks are LUKS encrypted with keyfiles or a password that can be read from initrd of initramfs archive. Once the disks are properly decrypted and mounted I can add a secondary root account like before.
 
 #### Encrypted initramfs
 This time I was unlucky for my normal steps because the appliance I wanted to analyze had an encrypted initramfs. This is something I have not encountered before and I am still trying to fully understand how it works. Maybe I will write something about it in the future.
@@ -99,6 +99,8 @@ db          [addr]                         Dump memory in bytes.
 
 Using the VBoxDbg command `db 00008800d8cd3000` I could easily verify that I found the beginning of `/etc/shadow`:
 ![Displaying Memory](https://github.com/ateamjkr/posts/blob/master/img/vboxdbg-002.png)
+
+_Note_: I blurred the original hash to protect the innocent. 
 
 ##### Step 2 - Modify memory
 I had the correct address of the cached file in memory so I was ready to replace the contents with some data that suited me better - the hash of the password `root`. To make replacement easier I also used a 7 character salt like I found on the VM so that the length of my password hash and the one configured matched.
