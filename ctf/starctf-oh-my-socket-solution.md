@@ -57,7 +57,7 @@ while True:
 (...)
 ```
 
-To get the flag we have to send `*ctf` to the socket and can then read the flag from the socket. An important detail is that the server is not threaded for forked so that the server can only work on one connection at a time.
+To get the flag we have to send `*ctf` to the socket and can then read the flag from the socket. An important detail is that the server is not threaded or forked so that the server can only work on one connection at a time.
 
 This one connection gets established by the `client` container directly at startup (and connection does not get stopped at any time):
 
@@ -147,13 +147,13 @@ This means a legitimate RST packet (correct SEQ [sequence] number) is processed 
 * Destination Port
 * Sequence Number
 
-(Un)fortunately there seems to be no programmatic way to get the sequence numbers of a connection from the `/proc` file system as this would impose risks from local attackers (terminating connections, injecting into TCP streams, etc.). Also the sequence number is a 32bit integer that is initialized with a random value (`ISN`) and incremented for every packet being transferred. So it can't be guessed or bruteforced (details in [RFC6528](https://tools.ietf.org/html/rfc6528)).
+(Un)fortunately there seems to be no programmatic way to get the sequence numbers of a connection from the `/proc` file system as this would impose risks from local attackers (terminating connections, injecting into TCP streams, etc.). Also the sequence number is a 32bit integer that is initialized with a random value the initial sequence number (`ISN`) and incremented for every packet being transferred. So it can't be guessed or bruteforced (details in [RFC6528](https://tools.ietf.org/html/rfc6528)).
 
-After some googling I found this [post (with linked paper)](https://lwn.net/Articles/531090/) that documents a side channel attack via the `DelayedACKLost` counter. The counter increases when the local TCP stacks sends a delayed and duplicated ACK because the remote peer retransmitted a packet.
+After some googling I found this [post (with linked paper)](https://lwn.net/Articles/531090/) that documents a side channel attack via the `DelayedACKLost` counter. The counter increases when the local TCP stacks sends a delayed and duplicated ACK because the remote peer retransmitted a packet out of sequence (read: too late).
 
 > The key to this search is a bug in the way the Linux kernel handles packets with incorrect sequence numbers. If a packet is received that has a sequence number "less than" that which is expected, the DelayedACKLost counter is incremented—regardless of whether the packet is an acknowledgment (ACK) or not. The calculation that is done to determine whether the number is less than what is expected essentially partitions the 32-bit sequence number space into two halves. Because DelayedACKLost does not get incremented if the sequence number is larger than the expected number, it can be used in a search to narrow in on the value of interest.
 
-Luckily the mentioned `DelayedACKLost` counter can still be found in `/proc/net/netstat` (*note*: different kernel versions have different columns in `netstat`).
+Luckily the mentioned `DelayedACKLost` counter can still be found in `/proc/net/netstat` (*note*: different kernel versions have different columns in `netstat` so you may need to change this in this script when using locally).
 
 As we have `scapy` installed on the `webserver` container where we have RCE with `root` permissions we may use the `DelayedACKLost`-oracle to determine the current sequence number by crafting spoofed packets.
 
@@ -211,7 +211,7 @@ def binary_search_recursive(start, end):
         return binary_search_recursive(start, mid-1)
 ```
 
-Unfortunately this solution is not stable. The problem seems to be that depending on the current real sequence number that sometime the counter won't increase although the spoofed sequence number is smaller. The reason for this seems to be that whenever you are close to a sequence number wrap the TCP stack does some magic here while calculating out-of-sequence ACKs.
+Unfortunately this solution is not stable. The problem seems to be that depending on the current real sequence number that sometime the counter won't increase although the spoofed sequence number is smaller. It seemed whenever you are close to a sequence number wrap the TCP stack does some magic here while calculating out-of-sequence ACKs.
 
 Therefore I added a first step that does not begin in the middle (`2**31`) like the divide and conquer would do but to just start with a sequence of 0 and go up in `2**24` chunks until we find the sequence number bounds that way. Also this part of the code finds the first sequence number chunk where the `DelayedACKLost` counter first increases (and thus we are safe from the counter wrap magic now):
 
@@ -329,7 +329,10 @@ When starting the containers a TCP three-way-handshake between the `client` (`17
 
 ```
 
-We can see the `SYN` (`[S]`) packet from the `client` as a first packet and see the initial sequence number (ISN) the client chose: `seq 2538559707`. The second packet, `SYN-ACK` (`[S.]`), is from the `server` and we can see its' chosen initial (ISN): `seq 3130168331`. As a side note we can also see that the server acknowledges the `client`'s ISN: `ack 2538559708`. The third packet is the acknowledgment of the `server`'s ISN by the `client`.
+We can see the `SYN` (`[S]`) packet from the `client` as a first packet and see the initial sequence number (ISN) the client chose: `seq 2538559707`. The second packet, `SYN-ACK` (`[S.]`), is from the `server` and we can see its' chosen initial (ISN): `seq 3130168331`. As a side note we can also see that the server acknowledges the `client`'s ISN: `ack 2538559708`. The third packet is the acknowledgment of the `server`'s ISN by the `client`. We also see the MAC addresses involved:
+
+* `02:42:ac:15:00:03` for the client
+* `02:42:ac:15:00:02` for the server
 
 The connection will just sit there idle for minutes (and hours) as the client and server code do not transmit any data at all: the server is waiting for data from the client, the client is not sending anything.
 
@@ -369,9 +372,13 @@ In the packet capture we can see those spoofed packets:
 
 ```
 
-We see `ACK` packets with `seq 0:1`, `16777216:16777217`, `33554432:33554433` and `50331648:50331649` from the spoofed `server` to the `client`. The `client` answers with `ACK` packets (but `ACK`ing the correct sequence number: `ack 3130168332`). Unfortunately we do not see this packet from `webserver` so we can't just sniff the sequence number from the wire ;-).
+We see `ACK` packets with `seq 0:1`, `16777216:16777217`, `33554432:33554433` and `50331648:50331649` from the spoofed `server` to the `client`. The `client` answers with `ACK` packets (but `ACK`ing the correct sequence number: `ack 3130168332`). Unfortunately we do not see this packet from `webserver` so we can't just sniff the sequence number from the wire ;-). We can also see the faked packet by looking at the MAC addresses:
 
-*Note*: As you can see from the non-increasing `DelayedACKLost` counter we see this TCP stack magic here because the sequence number is "near" the 32bit wrap.
+* `02:42:ac:15:00:04` for the webserver
+* `02:42:ac:15:00:03` for the client
+* `02:42:ac:15:00:02` for the server
+
+*Note*: As you can see from the non-increasing `DelayedACKLost` counter we see the mentioned TCP stack magic because the sequence number is "near" the 32bit wrap.
 
 Eventually the script finds the sequence number range where the `DelayedACKLost` counter begins increasing:
 
