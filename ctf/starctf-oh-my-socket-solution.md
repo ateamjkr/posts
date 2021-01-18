@@ -10,7 +10,7 @@ Solution: [starctf-oh-my-socket-solution.py](starctf-oh-my-socket-solution.py)
 
 ## Overview
 
-In this challenge we are given a URL to an upload function on a webserver as long with the IP addresses of the webserver, a client and a server.
+In this challenge we are given a URL to an upload function on a webserver along with the IP addresses of the webserver, a client and a server.
 
 All three "machines" are built as docker containers running on dedicated and fixed IP addresses:
 
